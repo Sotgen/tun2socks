@@ -8,7 +8,7 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/core"
 	"github.com/xjasonlyu/tun2socks/v2/core/device"
 	"github.com/xjasonlyu/tun2socks/v2/core/device/fdbased"
-	_ "github.com/xjasonlyu/tun2socks/v2/proxy/proto/socks"
+	_ "github.com/xjasonlyu/tun2socks/v2/proxy"
 )
 
 var (
@@ -17,7 +17,6 @@ var (
 	dev     device.Device
 )
 
-// StartTun2Socks menjalankan tunnel gVisor menggunakan FD dari Android VpnService
 func StartTun2Socks(fd int, socksAddr string, mtu int) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -46,7 +45,6 @@ func StartTun2Socks(fd int, socksAddr string, mtu int) error {
 	return nil
 }
 
-// StopTun2Socks mematikan service VPN
 func StopTun2Socks() {
 	mu.Lock()
 	defer mu.Unlock()
@@ -65,7 +63,6 @@ func StopTun2Socks() {
 	running = false
 }
 
-// IsRunning cek status service
 func IsRunning() bool {
 	mu.Lock()
 	defer mu.Unlock()
