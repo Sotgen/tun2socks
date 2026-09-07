@@ -40,7 +40,8 @@ jobs:
       - name: Init gomobile & tidy deps
         run: |
           gomobile init
-          go get golang.org/x/mobile/bind
+          go get golang.org/x/mobile/bind@latest
+          go mod download
           go mod tidy
 
       - name: Compile AAR
@@ -61,4 +62,3 @@ jobs:
         with:
           name: tun2socks-release
           path: output/tun2socks.aar
-          
