@@ -3,13 +3,12 @@ package mobile
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"sync"
 
 	"github.com/xjasonlyu/tun2socks/v2/core"
 	"github.com/xjasonlyu/tun2socks/v2/core/device"
 	"github.com/xjasonlyu/tun2socks/v2/core/device/fdbased"
-	"github.com/xjasonlyu/tun2socks/v2/proxy"
+	_ "github.com/xjasonlyu/tun2socks/v2/proxy/socks"
 )
 
 var (
@@ -18,10 +17,10 @@ var (
 	dev     device.Device
 )
 
-// StartTun2Socks menerima File Descriptor dari VpnService Android dan proxy lokal
+// StartTun2Socks menjalankan tunnel gVisor menggunakan FD dari Android VpnService
 // fd: file descriptor integer dari Android
-// socksAddr: format "127.0.0.1:1080"
-// mtu: biasanya 1500
+// socksAddr: contoh "127.0.0.1:1080"
+// mtu: standar 1500
 func StartTun2Socks(fd int, socksAddr string, mtu int) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -30,34 +29,23 @@ func StartTun2Socks(fd int, socksAddr string, mtu int) error {
 		return errors.New("tun2socks is already running")
 	}
 
-	// 1. Buka device TUN dari FD Android
-	tunDev, err := fdbased.Open(uintptr(fd), uint32(mtu))
+	// 1. Parameter fdbased.Open pada tun2socks v2: (name string, mtu uint32, fd int)
+	tunDev, err := fdbased.Open("tun", uint32(mtu), fd)
 	if err != nil {
 		return fmt.Errorf("failed to open fd: %w", err)
 	}
 	dev = tunDev
 
-	// 2. Parse URL proxy SOCKS5
-	proxyURI, err := url.Parse("socks5://" + socksAddr)
-	if err != nil {
-		_ = dev.Close()
-		return fmt.Errorf("invalid socks address: %w", err)
-	}
+	// 2. Format URL proxy SOCKS5
+	proxyURL := fmt.Sprintf("socks5://%s", socksAddr)
 
-	handler, err := proxy.NewProxy(proxyURI)
-	if err != nil {
-		_ = dev.Close()
-		return fmt.Errorf("failed to create proxy handler: %w", err)
-	}
+	// 3. Register handler dan device ke core engine
+	core.RegisterOutputDevice(dev)
 
-	// 3. Jalankan core engine dengan stack gvisor
-	err = core.Start(
-		core.WithDevice(dev),
-		core.WithProxyHandler(handler),
-		core.WithStack("gvisor"),
-	)
-	if err != nil {
-		_ = dev.Close()
+	// 4. Start core engine tun2socks (gVisor stack)
+	if err := core.Start(core.WithProxy(proxyURL), core.WithStack("gvisor")); err != nil {
+		dev.Close()
+		dev = nil
 		return fmt.Errorf("failed to start core: %w", err)
 	}
 
@@ -65,7 +53,7 @@ func StartTun2Socks(fd int, socksAddr string, mtu int) error {
 	return nil
 }
 
-// StopTun2Socks untuk mematikan engine
+// StopTun2Socks mematikan service VPN
 func StopTun2Socks() {
 	mu.Lock()
 	defer mu.Unlock()
@@ -74,15 +62,17 @@ func StopTun2Socks() {
 		return
 	}
 
+	core.Stop()
+
 	if dev != nil {
-		_ = dev.Close()
+		dev.Close()
 		dev = nil
 	}
-	core.Stop()
+
 	running = false
 }
 
-// IsRunning cek status koneksi
+// IsRunning cek status service
 func IsRunning() bool {
 	mu.Lock()
 	defer mu.Unlock()
