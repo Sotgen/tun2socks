@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/xjasonlyu/tun2socks/v2/core/device/fdbased"
 	"github.com/xjasonlyu/tun2socks/v2/engine"
 )
 
@@ -15,7 +14,7 @@ var (
 	key     *engine.Key
 )
 
-// StartTun2Socks menjalankan engine gVisor menggunakan file descriptor dari Android VpnService
+// StartTun2Socks menjalankan engine tun2socks menggunakan FD dari Android VpnService
 func StartTun2Socks(fd int, socksAddr string, mtu int) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -24,26 +23,15 @@ func StartTun2Socks(fd int, socksAddr string, mtu int) error {
 		return errors.New("tun2socks is already running")
 	}
 
-	// Buka interface TUN Android
-	dev, err := fdbased.Open("tun", uint32(mtu), fd)
-	if err != nil {
-		return fmt.Errorf("failed to open fd: %w", err)
-	}
-
-	// Konfigurasi engine tun2socks v2
+	// Device string format URL fd bawaan engine: fd://<angka>
 	k := &engine.Key{
-		Device: dev,
+		Device: fmt.Sprintf("fd://%d", fd),
 		Proxy:  fmt.Sprintf("socks5://%s", socksAddr),
-		Stack:  "gvisor",
 		MTU:    mtu,
 	}
 
-	// Start engine
 	engine.Insert(k)
-	if err := engine.Start(); err != nil {
-		engine.Stop()
-		return fmt.Errorf("failed to start engine: %w", err)
-	}
+	engine.Start()
 
 	key = k
 	running = true
